@@ -78,6 +78,21 @@ def unitDirection (w : E) : E := ‖w‖⁻¹ • w
 def stretchingRate (S : E →L[ℝ] E) (w : E) : ℝ :=
   inner ℝ (unitDirection w) (S (unitDirection w))
 
+/-- The full normalized viscous damping in the vorticity-magnitude equation.
+
+At a spatial maximum of `‖w‖`, the pairing `⟪ξ, Δw⟫` is nonpositive, so this
+quantity is nonnegative.  Keeping it intact retains both curvature of the
+magnitude peak and variation of the vorticity direction. -/
+def normalizedViscousDamping (ν : ℝ) (w lapW : E) : ℝ :=
+  -(ν * inner ℝ (unitDirection w) lapW) / ‖w‖
+
+/-- Favorable sign of the full normalized viscous damping. -/
+theorem normalizedViscousDamping_nonneg {ν : ℝ} {w lapW : E}
+    (hν : 0 ≤ ν) (hvisc : inner ℝ (unitDirection w) lapW ≤ 0) :
+    0 ≤ normalizedViscousDamping ν w lapW := by
+  unfold normalizedViscousDamping
+  exact div_nonneg (neg_nonneg.mpr (mul_nonpos_of_nonneg_of_nonpos hν hvisc)) (norm_nonneg w)
+
 theorem norm_smul_unitDirection {w : E} (hw : w ≠ 0) : ‖w‖ • unitDirection w = w := by
   simp only [unitDirection, smul_smul]
   rw [mul_inv_cancel₀ (norm_ne_zero_iff.mpr hw), one_smul]
@@ -117,6 +132,27 @@ theorem hasDerivAt_vorticity_magnitude
   rw [hS, real_inner_smul_right]
   simp only [stretchingRate]
   ring
+
+/-- The exact magnitude evolution rewritten as stretching minus the full
+normalized viscous damping.  No favorable sign is discarded. -/
+theorem hasDerivAt_vorticity_magnitude_with_damping
+    {w : ℝ → E} {t ν : ℝ} (S : E →L[ℝ] E) (lapW : E) (hw0 : w t ≠ 0)
+    (hw : HasDerivAt w (S (w t) + ν • lapW) t) :
+    HasDerivAt (fun s => ‖w s‖)
+      ((stretchingRate S (w t) - normalizedViscousDamping ν (w t) lapW) * ‖w t‖) t := by
+  convert hasDerivAt_vorticity_magnitude S lapW hw0 hw using 1
+  unfold normalizedViscousDamping
+  have hn : ‖w t‖ ≠ 0 := norm_ne_zero_iff.mpr hw0
+  field_simp [hn]
+  all_goals ring
+
+/-- Algebraic low/high strain split underlying the energy-paid reduction. -/
+theorem stretching_split_sub_damping_le
+    {full low high damping lowBudget residual : ℝ}
+    (hsplit : full = low + high) (hlow : low ≤ lowBudget)
+    (hresidual : high - damping ≤ residual) :
+    full - damping ≤ lowBudget + residual := by
+  linarith
 
 /-- At a point where the viscous pairing is nonpositive, positive viscosity makes
 the vorticity-magnitude derivative no larger than the stretching contribution. -/
