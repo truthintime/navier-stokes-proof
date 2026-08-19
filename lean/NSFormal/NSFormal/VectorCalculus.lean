@@ -41,6 +41,44 @@ theorem euclideanPartial_comm
   simp only [ContinuousLinearMap.flip_apply]
   exact (hf.contDiffAt.isSymmSndFDerivAt (by norm_num)).eq _ _
 
+/-- The derivative of a smooth torus lift has the same value at any two
+Euclidean representatives of the same torus point. -/
+theorem fderiv_torusLift_eq_of_torus3Mk_eq
+    {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E]
+    (f : Torus3 → E) (hf : ContDiff ℝ 1 (torusLift f))
+    {x y : Vec3} (hxy : torus3Mk x = torus3Mk y) :
+    fderiv ℝ (torusLift f) x = fderiv ℝ (torusLift f) y := by
+  let shift : Vec3 := x - y
+  let τ : Vec3 → Vec3 := fun z => z + shift
+  have hmkShift : ∀ z : Vec3, torus3Mk (z + shift) = torus3Mk z := by
+    intro z
+    ext i
+    have hi := congrArg (fun q : Torus3 => q i) hxy
+    change ((x i : ℝ) : AddCircle ((2 : ℝ) * Real.pi)) =
+      ((y i : ℝ) : AddCircle ((2 : ℝ) * Real.pi)) at hi
+    change (((z i + (x i - y i) : ℝ)) :
+      AddCircle ((2 : ℝ) * Real.pi)) =
+        ((z i : ℝ) : AddCircle ((2 : ℝ) * Real.pi))
+    rw [AddCircle.coe_add, AddCircle.coe_sub, hi, sub_self, add_zero]
+  have hfun : torusLift f ∘ τ = torusLift f := by
+    funext z
+    exact congrArg f (hmkShift z)
+  have hτ : DifferentiableAt ℝ τ y := by
+    dsimp [τ]
+    fun_prop
+  have hflift : DifferentiableAt ℝ (torusLift f) (τ y) :=
+    (hf.differentiable one_ne_zero).differentiableAt
+  have hfd := congrArg (fun g : Vec3 → E => fderiv ℝ g y) hfun
+  rw [fderiv_comp y hflift hτ] at hfd
+  have hτfd : fderiv ℝ τ y = ContinuousLinearMap.id ℝ Vec3 := by
+    dsimp [τ]
+    rw [fderiv_add_const]
+    exact (hasFDerivAt_id y).fderiv
+  rw [hτfd, ContinuousLinearMap.comp_id] at hfd
+  have hτy : τ y = x := by
+    simp [τ, shift]
+  simpa only [hτy] using hfd
+
 /-- A directional Fréchet derivative is the coordinate sum of its standard
 partial derivatives. -/
 theorem fderiv_apply_eq_sum_euclideanPartial
@@ -348,6 +386,22 @@ theorem euclideanJacobian_curl_eq
     rw [euclideanPartial_component (hpartial 0 x) k 1,
       euclideanPartial_component (hpartial 1 x) k 0]
     rfl
+
+/-- The divergence of the curl of a `C²` Euclidean field vanishes. -/
+theorem euclideanDivergence_curl_eq_zero
+    {u : Vec3 → Vec3} (hu : ContDiff ℝ 2 u) (x : Vec3) :
+    euclideanDivergence (fun y => euclideanCurl u y) x = 0 := by
+  rw [euclideanDivergence, euclideanJacobian_curl_eq hu x]
+  simp only [divergenceOfJacobian, Fin.sum_univ_three,
+    curlJacobianOfHessian]
+  change
+    (euclideanHessian u x 0 1 2 - euclideanHessian u x 0 2 1) +
+      (euclideanHessian u x 1 2 0 - euclideanHessian u x 1 0 2) +
+      (euclideanHessian u x 2 0 1 - euclideanHessian u x 2 1 0) = 0
+  rw [euclideanHessian_symm hu x 0 2 1,
+    euclideanHessian_symm hu x 1 0 2,
+    euclideanHessian_symm hu x 2 1 0]
+  ring
 
 /-- Lifted incompressible convection identity:
 `curl ((u·∇)u) = (u·∇)ω - (ω·∇)u`, with `ω = curl u`. -/
@@ -659,6 +713,33 @@ theorem torusVectorLaplacian_eq_euclideanVectorLaplacian
 theorem torusCurl_eq_euclideanCurl
     (u : C(Torus3, Vec3)) (x : Torus3) :
     torusCurl u x = euclideanCurl (torusLift u) (torus3Representative x) := rfl
+
+/-- The lifted curl is independent of the Euclidean representative of a torus
+point. -/
+theorem euclideanCurl_torusLift_eq_of_torus3Mk_eq
+    (u : C(Torus3, Vec3)) (hu : ContDiff ℝ 1 (torusLift u))
+    {x y : Vec3} (hxy : torus3Mk x = torus3Mk y) :
+    euclideanCurl (torusLift u) x = euclideanCurl (torusLift u) y := by
+  unfold euclideanCurl euclideanJacobian euclideanPartial
+  rw [fderiv_torusLift_eq_of_torus3Mk_eq u hu hxy]
+
+/-- Pointwise equality `w = curl u` on the torus is equivalent to the expected
+identity between their periodic Euclidean lifts. -/
+theorem torusLift_eq_euclideanCurl_of_curl
+    (u w : C(Torus3, Vec3))
+    (hu : ContDiff ℝ 1 (torusLift u))
+    (hw : ∀ x : Torus3, w x = torusCurl u x)
+    (y : Vec3) :
+    torusLift w y = euclideanCurl (torusLift u) y := by
+  calc
+    torusLift w y = w (torus3Mk y) := rfl
+    _ = torusCurl u (torus3Mk y) := hw _
+    _ = euclideanCurl (torusLift u)
+        (torus3Representative (torus3Mk y)) :=
+      torusCurl_eq_euclideanCurl u _
+    _ = euclideanCurl (torusLift u) y :=
+      euclideanCurl_torusLift_eq_of_torus3Mk_eq u hu
+        (torus3Mk_representative (torus3Mk y))
 
 theorem torusDivergence_eq_euclideanDivergence
     (u : C(Torus3, Vec3)) (x : Torus3) :
